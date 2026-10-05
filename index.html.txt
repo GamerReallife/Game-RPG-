@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GameLife OS</title>
+  <style>
+    /* ВЕСЬ ДИЗАЙН ЗДЕСЬ */
+    :root {
+      --bg: #0f111a;
+      --card-bg: #1e2230;
+      --accent: #7c4dff;
+      --text: #e0e6ed;
+      --muted: #94a3b8;
+      --border: #2d3748;
+    }
+    body { margin: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: var(--bg); color: var(--text); display: flex; height: 100vh; overflow: hidden; }
+    .sidebar { width: 260px; background: #0b0c12; border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 20px; box-sizing: border-box; }
+    .sidebar h2 { color: var(--accent); margin-top: 0; margin-bottom: 30px; }
+    .nav-btn { background: none; border: none; color: var(--text); padding: 12px 16px; text-align: left; cursor: pointer; border-radius: 8px; margin-bottom: 10px; font-size: 15px; transition: 0.2s; }
+    .nav-btn:hover, .nav-btn.active { background: var(--card-bg); color: var(--accent); font-weight: bold; }
+    .content { flex: 1; padding: 30px; overflow-y: auto; }
+    .section { display: none; }
+    .section.active { display: block; }
+    .card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 24px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 16px; margin-bottom: 30px; }
+    input, select, textarea { background: #0f111a; border: 1px solid var(--border); color: var(--text); padding: 12px; border-radius: 8px; width: 100%; box-sizing: border-box; margin-bottom: 12px; font-family: inherit; }
+    button { padding: 12px; border-radius: 8px; width: 100%; box-sizing: border-box; cursor: pointer; font-weight: bold; border: none; transition: 0.2s; }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover { opacity: 0.9; }
+    .btn-secondary { background: transparent; color: var(--muted); border: 1px solid var(--border); margin-top: 10px; }
+    .btn-secondary:hover { color: var(--text); border-color: var(--muted); }
+    .tag { font-size: 12px; background: rgba(124, 77, 255, 0.2); color: var(--accent); padding: 4px 10px; border-radius: 6px; display: inline-block; margin-top: 8px; }
+  </style>
+</head>
+<body>
+
+  <!-- КАРКАС ИНТЕРФЕЙСА -->
+  <div class="sidebar">
+    <h2>GameLife OS</h2>
+    <button class="nav-btn active" onclick="switchTab('auth')">🔐 Аккаунт</button>
+    <button class="nav-btn" onclick="switchTab('inventory')">👗 Инвентарь & Образы</button>
+    <button class="nav-btn" onclick="switchTab('notes')">📝 Дневники & Логи</button>
+  </div>
+
+  <div class="content">
+    
+    <!-- Экран Входа -->
+    <div id="auth" class="section active">
+      <div class="card" style="max-width: 360px;">
+        <h3>Вход в систему</h3>
+        <input type="email" id="authEmail" placeholder="Email">
+        <input type="password" id="authPass" placeholder="Пароль">
+        <button class="btn-primary" id="btnLogin">Войти</button>
+        <button class="btn-secondary" id="btnRegister">Зарегистрироваться</button>
+        <button class="btn-secondary" id="btnLogout" style="display:none; margin-top: 10px;">Выйти из аккаунта</button>
+        <div id="authStatus" style="margin-top: 15px; font-size: 13px; color: #94a3b8;">Статус: ожидание входа...</div>
+      </div>
+    </div>
+
+<!-- Экран Инвентаря -->
+    <div id="inventory" class="section">
+      <h2>🎒 Инвентарь & Конструктор Образов</h2>
+      <div class="card">
+        <h3>Добавить элемент в гардероб / вишлист</h3>
+        <input type="text" id="itemName" placeholder="Название вещи или сета">
+        <select id="itemType">
+          <option value="have">Имею в наличии</option>
+          <option value="wish">Вишлист / Нужно докупить</option>
+        </select>
+        <button class="btn-primary" onclick="addItem()">Добавить в систему</button>
+      </div>
+      <h3>В наличии (Loadouts)</h3>
+      <div class="grid" id="haveGrid"></div>
+      <h3>Вишлист / Планы на покупку</h3>
+      <div class="grid" id="wishGrid"></div>
+    </div>
+
+    <!-- Экран Заметок -->
+    <div id="notes" class="section">
+      <h2>📓 Дневники и Быстрые Заметки</h2>
+      <div class="card">
+        <h3>Новая запись / Игровой лог</h3>
+        <input type="text" id="noteTitle" placeholder="Заголовок заметки или чекпоинта">
+        <textarea id="noteContent" rows="4" placeholder="Текст записи..."></textarea>
+        <button class="btn-primary" onclick="addNote()">Сохранить лог</button>
+      </div>
+      <h3>Архив записей</h3>
+      <div id="notesList"></div>
+    </div>
+
+  </div>
+
+  <!-- МОЗГ ПРИЛОЖЕНИЯ И БАЗА ДАННЫХ -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+
+    // Твои ключи Firebase
+hash_config {
+  algorithm: SCRYPT,
+  base64_signer_key: 5wv38PrviF2y5oPq0TuQsMPa2zBqPHtpuvYQ0A+dSdCT8Kr9iZLbd24aTPxRmTLVKuBl5y+b9bFBqF/1TETTZg==,
+  base64_salt_separator: Bw==,
+  rounds: 8,
+  mem_cost: 14,
+}
+    const firebaseConfig = {
+
+  apiKey: "AIzaSyBVu_O3g7BpwBCm_l3ewZAMPdJhS2Odao4",
+
+  authDomain: "gamelife-414c2.firebaseapp.com",
+
+  projectId: "gamelife-414c2",
+
+  storageBucket: "gamelife-414c2.firebasestorage.app",
+
+  messagingSenderId: "123779948615",
+
+  appId: "1:123779948615:web:a60810e053332435ed1162",
+
+  measurementId: "G-7S5T93SKK6"
+
+};
+   
+
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const statusText = document.getElementById('authStatus');
+
+    // Логика кнопок входа
+    document.getElementById('btnLogin').onclick = () => {
+      signInWithEmailAndPassword(auth, document.getElementById('authEmail').value, document.getElementById('authPass').value)
+        .catch(err => statusText.innerText = "Ошибка входа: " + err.message);
+    };
+
+    document.getElementById('btnRegister').onclick = () => {
+      createUserWithEmailAndPassword(auth, document.getElementById('authEmail').value, document.getElementById('authPass').value)
+        .then(() => statusText.innerText = "Аккаунт успешно создан!")
+        .catch(err => statusText.innerText = "Ошибка регистрации: " + err.message);
+    };
+
+    document.getElementById('btnLogout').onclick = () => signOut(auth);
+
+    onAuthStateChanged(auth, user => {
+      if (user) {
+        statusText.innerText = "✅ Авторизован как: " + user.email;
+        statusText.style.color = "#4ade80";
+        document.getElementById('btnLogout').style.display = "block";
+      } else {
+        statusText.innerText = "Статус: Вы не вошли в систему";
+        statusText.style.color = "#94a3b8";
+        document.getElementById('btnLogout').style.display = "none";
+      }
+    });
+
+    // Логика работы интерфейса
+    window.switchTab = function(tabId) {
+      document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+      document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+      document.getElementById(tabId).classList.add('active');
+      event.currentTarget.classList.add('active');
+    };
+
+    const inventory = [];
+    const notes = [];
+
+    window.addItem = function() {
+      const name = document.getElementById('itemName').value;
+const type = document.getElementById('itemType').value;
+      if (!name) return;
+      inventory.push({ name, type });
+      document.getElementById('itemName').value = '';
+      
+      const haveGrid = document.getElementById('haveGrid');
+      const wishGrid = document.getElementById('wishGrid');
+      haveGrid.innerHTML = ''; wishGrid.innerHTML = '';
+      
+      inventory.forEach(item => {
+        const div = document.createElement('div');
+        div.className = 'card'; div.style.marginBottom = '0';
+        div.innerHTML = `<strong>${item.name}</strong><br><span class="tag">${item.type === 'have' ? 'В наличии' : 'Нужно докупить'}</span>`;
+        if(item.type === 'have') haveGrid.appendChild(div);
+        else wishGrid.appendChild(div);
+      });
+    };
+
+    window.addNote = function() {
+      const title = document.getElementById('noteTitle').value;
+      const content = document.getElementById('noteContent').value;
+      if (!title) return;
+      const date = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      notes.push({ title, content, date });
+      document.getElementById('noteTitle').value = '';
+      document.getElementById('noteContent').value = '';
+      
+      const list = document.getElementById('notesList');
+      list.innerHTML = '';
+      [...notes].reverse().forEach(note => {
+        const div = document.createElement('div');
+        div.className = 'card';
+        div.innerHTML = `<div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border); padding-bottom:10px; margin-bottom:10px;"><strong style="color:var(--accent);">${note.title}</strong><span style="font-size:12px; color:var(--muted);">${note.date}</span></div><p style="margin:0; white-space:pre-wrap; line-height:1.5;">${note.content}</p>`;
+        list.appendChild(div);
+      });
+    };
+  </script>
+</body>
+</html>
